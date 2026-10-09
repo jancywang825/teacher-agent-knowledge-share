@@ -1,0 +1,6 @@
+# 真实 Webhook 凭证，禁止提交到 git（用 config.example.json 做模板）
+config.json
+
+# Python 缓存
+__pycache__/
+*.pyc
