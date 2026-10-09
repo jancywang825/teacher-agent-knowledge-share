@@ -18,18 +18,20 @@
 
 当用户发送包含 "@wecom-push" / "推送到企微群" / "同步到群" 的指令时，执行以下步骤：
 
-1. 确定待推送文本：在对话历史中，找到最后一条包含该指令的 user 消息；取其**之前、最近的一条 assistant 消息的完整文本**作为正文。
-   - 这正是"模型刚生成的最新回复"，不要使用本次指令执行中产生的回复。
-   - 若之前没有 assistant 回复，告知用户"没有可推送的内容"并停止，不要发空消息。
+1. 确定待推送文件：在对话历史中，找到最后一条包含该指令的 user 消息；在该消息**之前**、本次会话中**最近一次由你写入/生成并交付给用户的成果文件**（报告、PPT、图片、表格、脚本等）的绝对路径。
+   - 若一次性生成多个文件，取时间最新的一个。
+   - 排除 /tmp 临时文件、缓存/中间产物、以及本技能自身目录下的文件。
+   - 若之前没有可推送的成果文件，告知用户"本次没有可推送的文件"并停止。
 2. 确定 Webhook 地址（优先级）：用户在指令中直接附带的地址 > 环境变量 WECOM_WEBHOOK > REPO/config.json 的 webhook_url。
-3. 把待推送文本写入临时文件，例如 /tmp/wecom_push.txt。
-4. 运行命令（把 REPO 替换为真实路径）：
-   - 用配置文件地址：python3 REPO/scripts/push.py --text-file /tmp/wecom_push.txt
-   - 临时覆盖地址：python3 REPO/scripts/push.py --text-file /tmp/wecom_push.txt --webhook <地址>
-5. 解析输出 JSON：errcode==0 表示成功，否则按 errmsg 排查（地址错误/网络/超限）。
-6. 向用户简短汇报成功或失败。**严禁在回复中输出 Webhook 地址本身**。
+3. 运行命令（把 REPO 替换为真实路径，使用 --file 传入绝对路径）：
+   - 用配置文件地址：python3 REPO/scripts/push.py --file <文件绝对路径>
+   - 临时覆盖地址：python3 REPO/scripts/push.py --file <路径> --webhook <地址>
+   - 仅校验不发送：python3 REPO/scripts/push.py --file <路径> --dry-run
+   脚本会自动完成"上传文件拿 media_id → 发送 file 消息"两步。
+4. 解析输出 JSON：errcode==0 表示成功，否则按 errmsg 排查（地址错误/网络/文件超 20MB）。
+5. 向用户简短汇报成功或失败，并给出文件名。**严禁在回复中输出 Webhook 地址本身**。
 
-约束：企微文本上限 2048 字节，超长脚本会自动截断；Webhook 是群凭证，不得泄露。
+约束：只推送文件、不推送模型文字回复；企微文件上限 20MB；Webhook 是群凭证，不得泄露。
 ```
 
 ## 说明

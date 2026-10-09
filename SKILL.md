@@ -1,15 +1,16 @@
 ---
 name: teacher-knowledge-share
 description: >
-  将当前对话中模型刚刚生成的最新回复文本，通过企微（企业微信）群机器人 Webhook 推送到指定的企业微信群，便于教师把 AI 答疑/讲解同步到教研群或班级群。
-  当用户在对话中输入 @teacher-knowledge-share（可附带可选的新 Webhook 地址）时触发；用于把 AI 的回答同步到团队群。
+  将当前对话中模型刚刚生成/更新并交付的最新成果文件，通过企微（企业微信）群机器人 Webhook 推送到指定的企业微信群，便于教师把 AI 生成的报告/课件/图片等同步到教研群或班级群。
+  当用户在对话中输入 @teacher-knowledge-share（可附带可选的新 Webhook 地址）时触发；默认推送"最新生成的文件"，不推送模型文字回复。
 agent_created: true
 ---
 
-# teacher-knowledge-share（企微群机器人回复推送）
+# teacher-knowledge-share（企微群成果文件推送）
 
 ## 目标
-读取**本轮对话里模型刚刚生成的最新回复文本**，通过已配置的企微群机器人 Webhook，把该文本 POST 推送到企业微信群。
+读取**本轮对话里模型刚刚生成 / 更新并交付的最新成果文件**，通过已配置的企微群机器人 Webhook，把该**文件**上传并推送到企业微信群。
+**不推送模型的文字回复**——只推送文件本身。
 
 ## 触发方式
 - 用户在对话中输入 `@teacher-knowledge-share` 即触发本 Skill。
@@ -25,22 +26,23 @@ agent_created: true
 （在企微群 → 右上角 `...` → 群机器人 → 添加机器人 → 复制 Webhook 地址。）
 
 ## 执行步骤
-1. **确定待推送文本**：扫描对话消息列表，定位最后一条 `role=user` 且内容包含 `@teacher-knowledge-share` 的消息；
-   取该消息**之前、最近的一条 `role=assistant` 消息的完整文本内容**作为待推送正文。
-   - 这正是"模型本轮刚刚生成的最新回复"，**不要**使用本次 Skill 执行过程中产生的回复。
-   - 若在此之前不存在 assistant 回复，向用户说明"没有可推送的回复"并停止，不要发送空消息。
-   - 剥离该回复中可能附带的多余内部提示词 / 工具调试信息，仅保留面向用户的真实回答正文。
+1. **确定待推送文件**：扫描对话历史，定位最后一条 `role=user` 且内容包含 `@teacher-knowledge-share` 的消息；
+   在该消息**之前**、本次会话中**最近一次由你（assistant）写入 / 生成并交付给用户的成果文件**（如报告、PPT、图片、表格、脚本等），
+   取其**绝对路径**作为待推送文件。
+   - 若本次会话一次性生成了多个文件，取时间上最新的那一个。
+   - **排除项**：`/tmp` 等临时文件、缓存 / 中间产物、以及本 Skill 自身目录下的文件（SKILL.md / push.py / config 等）。
+   - 若该指令之前没有任何新生成 / 更新的成果文件，向用户说明"本次没有可推送的文件"并停止，不要发送空消息或推送无关文件。
 2. **确定 Webhook 地址**：按上方"配置"优先级取得地址。若最终仍为空，提示用户先配置 `config.json` 或在指令后附带地址，然后停止。
-3. **调用推送脚本**：把待推送文本写入系统临时目录的一个文本文件（例如 `/tmp/wecom_push_<时间戳>.txt`），
-   然后用 Bash 运行本 Skill 目录下的 `scripts/push.py`（`<SKILL_DIR>` 替换为加载本 Skill 时给出的根目录绝对路径）：
-   - 使用配置文件地址：`python3 <SKILL_DIR>/scripts/push.py --text-file /tmp/wecom_push_xxx.txt`
-   - 临时覆盖地址：`python3 <SKILL_DIR>/scripts/push.py --text-file /tmp/wecom_push_xxx.txt --webhook <地址>`
-   - 仅本地校验、不发真实请求：`python3 <SKILL_DIR>/scripts/push.py --text-file /tmp/wecom_push_xxx.txt --dry-run`
-4. **判定结果**：脚本会打印一行 JSON。若 `errcode == 0` 表示推送成功；否则根据 `errmsg` 排查（地址错误 / 网络不通 / 内容超限）。
-5. **向用户简短汇报**：仅回复"已推送到企微群 ✅"或失败原因。**严禁在回复中输出 Webhook 地址本身**。
+3. **调用推送脚本**：用 Bash 运行本 Skill 目录下的 `scripts/push.py`（`<SKILL_DIR>` 替换为加载本 Skill 时给出的根目录绝对路径），以 `--file` 传入绝对路径：
+   - 使用配置文件地址：`python3 <SKILL_DIR>/scripts/push.py --file <待推送文件绝对路径>`
+   - 临时覆盖地址：`python3 <SKILL_DIR>/scripts/push.py --file <路径> --webhook <地址>`
+   - 仅本地校验、不发真实请求：`python3 <SKILL_DIR>/scripts/push.py --file <路径> --dry-run`
+   - 脚本会自动完成两步：① 上传文件到企微获取 `media_id`；② 以 `file` 消息类型发送。无需手动处理。
+4. **判定结果**：脚本会打印一行 JSON。若 `errcode == 0` 表示推送成功；否则根据 `errmsg` 排查（地址错误 / 网络不通 / 文件超过 20MB 上限）。
+5. **向用户简短汇报**：仅回复"已推送文件：<文件名> 到企微群 ✅"或失败原因。**严禁在回复中输出 Webhook 地址本身**。
 
 ## 约束与注意
-- 企微文本消息正文上限为 2048 字节（约 680 个汉字）；超出时脚本会自动截断并追加"…(已截断)"。
+- 企微文件单次上限 **20MB**，超出时脚本会拒绝发送；`media_id` 有效期 3 天。
+- **只推文件、不推模型文字回复**——这是本 Skill 的核心约定。
 - Webhook 地址属于群入口凭证，不要明文外泄到聊天 / 日志 / 文件中；脚本默认不回显地址。
-- 默认只推送纯文本。如需 @群成员、发送 markdown / 图文卡片，可在 `scripts/push.py` 中扩展（文件内已预留说明）。
-- 中文等多字节文本以 UTF-8 字节计长，脚本已按字节安全截断，避免出现半个字符乱码。
+- 文本模式（`--text-file` / stdin）仍保留在脚本中仅供手动调试，Skill 自动执行时一律使用文件模式。

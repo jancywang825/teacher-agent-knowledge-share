@@ -1,7 +1,8 @@
 # teacher-knowledge-share — 企微群回复推送
 
-把对话中 AI **刚刚生成的最新回复**，通过企微（企业微信）群机器人 Webhook 推送到指定群。
-原用于教师把 AI 答疑/讲解同步到教研群或班级群，现已做成可跨 Agent 分发的版本。
+把对话中 AI **刚刚生成 / 更新并交付的最新成果文件**，通过企微（企业微信）群机器人 Webhook 推送到指定群。
+原用于教师把 AI 生成的报告 / 课件 / 图片等同步到教研群或班级群，现已做成可跨 Agent 分发的版本。
+**只推送文件，不推送模型文字回复。**
 
 ## 目录结构
 
@@ -33,7 +34,7 @@ teacher-knowledge-share/
 ~/.workbuddy/skills/teacher-knowledge-share/
 ```
 
-重启/刷新 WorkBuddy 后，对话中输入 `@teacher-knowledge-share` 即会自动把上一条 AI 回复推送到群。
+重启/刷新 WorkBuddy 后，对话中让模型生成/更新一个成果文件（报告、PPT、图片等），再输入 `@teacher-knowledge-share` 即会自动把**该文件**推送到群。
 
 ## 方式二：其他支持运行代码的 Agent（豆包 / Claude / ChatGPT 代码解释器 / 本地 Agent 等）
 
@@ -58,21 +59,25 @@ teacher-knowledge-share/
 
 - Webhook key 即群发消息权限，泄露等于任何人可向该群发消息。勿入 git、勿入聊天记录、勿公开。
 - 如怀疑泄露，立即在企微群机器人设置里「重置」key，并更新 `config.json`。
-- 企微文本单条上限 2048 字节，超长脚本会自动截断并追加"…(已截断)"。
+- 企微**文件**单次上限 20MB，`media_id` 有效期 3 天；**文本**单条上限 2048 字节（仅手动调试用到）。
+- 本 Skill 默认只推送文件、不推送模型文字回复。
 
 ## 脚本用法（手动/调试）
 
+Skill 自动执行时一律使用**文件模式**（`--file`）。以下为手动/调试示例：
+
 ```bash
-# 推送文件内容（推荐）
-python3 scripts/push.py --text-file /tmp/msg.txt
+# 推送文件（推荐，自动完成 上传+发送 两步）
+python3 scripts/push.py --file /path/to/报告.pdf
 
 # 临时覆盖 Webhook 地址
-python3 scripts/push.py --text-file /tmp/msg.txt --webhook https://qyapi.weixin.qq.com/...
+python3 scripts/push.py --file /path/to/报告.pdf --webhook https://qyapi.weixin.qq.com/...
 
-# 仅本地校验，不真实发送
+# 仅本地校验，不真实发送（检查文件存在与大小）
+python3 scripts/push.py --file /path/to/报告.pdf --dry-run
+
+# 文本模式（仅手动调试用，Skill 自动执行不调用）
 python3 scripts/push.py --text-file /tmp/msg.txt --dry-run
-
-# 也可从 stdin 读取
 echo "要推送的内容" | python3 scripts/push.py
 ```
 
